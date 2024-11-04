@@ -6,8 +6,9 @@
 
 // ------ define our neural network. ------
 
-#define INPUT_NUM 3
-#define HIDDEN_NUM 2
+#define INPUT_NUM 30
+#define HIDDEN_NUM 1
+#define HIDDEN2_NUM 1
 #include "deep.h"
 
 // -------
@@ -41,6 +42,7 @@ static void graph_fitness(int fig_x, int fig_y, int fig_width, int fig_height);
 static void add_fitness(float fit);
 static void train_whole(Network *network);
 static float point_error(Network *network);
+static void show_supervisor(const char *filename, int fig_x, int fig_y, int fig_width, int fig_height);
 
 
 // ------- Program start -------
@@ -125,6 +127,7 @@ int main(int argc, char *argv[]) {
       graph_capacities(learned_capacities, BLUE, 0, 0, WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
       graph_capacities(casc_learned_capacities, GREEN, 0, 0, WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
       graph_fitness(0, WINDOW_HEIGHT/2, WINDOW_WIDTH, WINDOW_HEIGHT/2);
+      show_supervisor("supervisor.png", WINDOW_WIDTH/2, 0, WINDOW_WIDTH/2, WINDOW_HEIGHT/2);
 
       char mse_buf[20];
       snprintf(mse_buf, sizeof(mse_buf), "%g", mse);
@@ -138,15 +141,32 @@ int main(int argc, char *argv[]) {
 
 // Train the network based on the dataset.
 static void train_whole(Network *network) {
+  float casc_capacities[CAPACITY_LEN];
+  for (int i = 0; i < INPUT_NUM; i++) {
+    casc_capacities[i] = capacities[i];
+  }
+
   for (int i = INPUT_NUM; i < CAPACITY_LEN - INPUT_NUM; i++) {
     // slice into input.
     Input input;
+
     for (int ii = 0; ii < INPUT_NUM; ii++) {
       input[ii] = capacities[i + ii - INPUT_NUM];
     }
 
     float expected = capacities[i];
+    backprop(&input, expected, network);
 
+    
+    for (int ii = 0; ii < INPUT_NUM; ii++) {
+      input[ii] = casc_capacities[i + ii - INPUT_NUM];
+    }
+
+    casc_capacities[i] = run_network(&input, network);
+
+    expected = capacities[i];
+
+    // very test-y: do both
     backprop(&input, expected, network);
   }
 }
@@ -255,4 +275,18 @@ static void graph_capacities(float *capacities, Color color, int fig_x, int fig_
   }
 
   DrawRectangleLines(fig_x + BOUNDING_OFFSET, fig_y + BOUNDING_OFFSET, fig_width - BOUNDING_OFFSET*2, fig_height - BOUNDING_OFFSET*2, RED);
+}
+
+static void show_supervisor(const char *filename, int fig_x, int fig_y, int fig_width, int fig_height) {
+  static struct { Texture2D texture; bool initialized; } maybe_texture = { 0, false };
+  if (!maybe_texture.initialized) {
+    Image image = LoadImage(filename);
+    ImageDrawText(&image, "the machine is learning", 10, 10, 14, RED);
+    ImageResize(&image, fig_width, fig_height);
+    Texture2D texture = LoadTextureFromImage(image);
+
+    maybe_texture.texture = texture;
+    maybe_texture.initialized = true;
+  }
+  DrawTexture(maybe_texture.texture, fig_x, fig_y, WHITE);
 }

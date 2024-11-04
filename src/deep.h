@@ -16,13 +16,22 @@
   // define a placeholder to silence other errors
   #define HIDDEN_NUM 20
 #endif
+#ifndef HIDDEN2_NUM
+  #error "You must define HIDDEN_NUM (number of nodes in the hidden layer)"
+
+  // define a placeholder to silence other errors
+  #define HIDDEN2_NUM 20
+#endif
 
 typedef float Input[INPUT_NUM];
 typedef float Hidden[HIDDEN_NUM];
+typedef float Hidden2[HIDDEN_NUM];
 typedef float HiddenWeights[HIDDEN_NUM][INPUT_NUM];
-typedef float OutputWeights[HIDDEN_NUM];
+typedef float Hidden2Weights[HIDDEN2_NUM][HIDDEN_NUM];
+typedef float OutputWeights[HIDDEN2_NUM];
 typedef struct {
   HiddenWeights hidden_weights;
+  Hidden2Weights hidden2_weights;
   OutputWeights output_weights;
 } Network;
 
@@ -35,16 +44,28 @@ void backprop(Input *input, float expected, Network *network);
 
 static float relu(float);
 static float relu_deriv(float);
+static float leaky_relu(float);
+static float leaky_relu_deriv(float);
+
+static float random_weight() {
+  return ((rand() / (float)RAND_MAX) * .2);
+}
 
 void init_random_weights(Network *network) {
   for (int i = 0; i < INPUT_NUM; i++) {
     for (int w = 0; w < HIDDEN_NUM; w++) {
-      network->hidden_weights[w][i] = ((rand() / (float)RAND_MAX) * 2.) - 1.;
+      network->hidden_weights[w][i] = random_weight();
     }
   }
 
-  for (int w = 0; w < HIDDEN_NUM; w++) {
-    network->output_weights[w] = ((rand() / (float)RAND_MAX) * 2.) - 1.;
+  for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+    for (int w = 0; w < HIDDEN_NUM; w++) {
+      network->hidden2_weights[w2][w] = random_weight();
+    }
+  }
+
+  for (int w = 0; w < HIDDEN2_NUM; w++) {
+    network->output_weights[w] = random_weight();
   }
 }
 
@@ -52,17 +73,24 @@ float run_network(Input *input, Network *network) {
   Hidden hidden = { 0 };
   for (int w = 0; w < HIDDEN_NUM; w++) {
     for (int i = 0; i < INPUT_NUM; i++) {
-      float weighed_input = relu((*input)[i] * network->hidden_weights[w][i]);
+      float weighed_input = leaky_relu((*input)[i] * network->hidden_weights[w][i]);
       hidden[w] += weighed_input;
     }
   }
 
-  float output = 0.;
+  Hidden2 hidden2 = { 0 };
   for (int w = 0; w < HIDDEN_NUM; w++) {
-    float weighed_out = hidden[w] * network->output_weights[w];
-    output += weighed_out;
+    for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+      float weighed_hidden = leaky_relu(hidden[w] * network->hidden2_weights[w2][w]);
+      hidden2[w2] += weighed_hidden;
+    }
   }
   
+  float output = 0.;
+  for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+    output += hidden2[w2] * network->output_weights[w2];
+  }
+
   return output;
 }
 
@@ -71,30 +99,55 @@ void backprop(Input *input, float expected, Network *network) {
   Hidden hidden = { 0 };
   for (int w = 0; w < HIDDEN_NUM; w++) {
     for (int i = 0; i < INPUT_NUM; i++) {
-      hidden[w] += relu((*input)[i] * network->hidden_weights[w][i]);
+      float weighed_input = leaky_relu((*input)[i] * network->hidden_weights[w][i]);
+      hidden[w] += weighed_input;
     }
   }
 
-  float output = 0.;
+  Hidden2 hidden2 = { 0 };
   for (int w = 0; w < HIDDEN_NUM; w++) {
-    output += hidden[w] * network->output_weights[w];
+    for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+      float weighed_hidden = leaky_relu(hidden[w] * network->hidden2_weights[w2][w]);
+      hidden2[w2] += weighed_hidden;
+    }
   }
+  
+  float output = 0.;
+  for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+    output += hidden2[w2] * network->output_weights[w2];
+  }
+
 
   // ----- backprop -----
   
   // output layer delta
   float out_delta = expected - output;
 
+  // hidden2 layer delta
+  Hidden2 hidden2_delta = { 0 };
+  for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+    hidden2_delta[w2] = network->output_weights[w2] * out_delta * leaky_relu_deriv(hidden2[w2]);
+  }
+
   // hidden layer delta
   Hidden hidden_delta = { 0 };
   for (int w = 0; w < HIDDEN_NUM; w++) {
-    hidden_delta[w] = network->output_weights[w] * out_delta * relu_deriv(hidden[w]);
+    for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+      hidden_delta[w] += network->hidden2_weights[w2][w] * hidden2_delta[w2] * leaky_relu_deriv(hidden[w]);
+    }
   }
 
   // update hid-out weights
-  #define ALPHA .2
+  #define ALPHA .05
+  for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+    network->output_weights[w2] += ALPHA * hidden2[w2] * out_delta;
+  }
+
+  // update in-hid weights
   for (int w = 0; w < HIDDEN_NUM; w++) {
-    network->output_weights[w] += ALPHA * hidden[w] * out_delta;
+    for (int w2 = 0; w2 < HIDDEN2_NUM; w2++) {
+      network->hidden2_weights[w2][w] += ALPHA * hidden[w] * hidden2_delta[w2];
+    }
   }
 
   // update in-hid weights
@@ -115,6 +168,18 @@ static inline float relu_deriv(float value) {
   return value > 0
     ? 1
     : 0;
+}
+
+static inline float leaky_relu(float value) {
+  return value < 0
+    ? .01 * value
+    : value;
+}
+
+static inline float leaky_relu_deriv(float value) {
+  return value > 0
+    ? 1
+    : .01;
 }
 
 #endif

@@ -1,6 +1,6 @@
 build: prog
 prog: src/main.c src/deep.h
-	cc src/main.c -o prog -g -L./ext -lraylib -framework Cocoa -framework OpenGL -framework IOKit
+	cc src/main.c -o prog -g -fsanitize=address -L./ext -lraylib -framework Cocoa -framework OpenGL -framework IOKit
 
 run: prog
 	./prog data/capacities.csv

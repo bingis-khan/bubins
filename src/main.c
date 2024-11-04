@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "raylib.h"
 
@@ -83,38 +84,28 @@ int main(int argc, char *argv[]) {
 
     // calculate mse (to check fitness)
     Input input;
-    for (int ii = 0; ii < INPUT_NUM; ii++) {
-      input[ii] = capacities[ii];
-    }
+    memcpy(&input, &capacities, INPUT_NUM * sizeof(float));
 
     float mse = point_error(&network);
     add_fitness(mse);
 
     // graph learned capacities.
-    for (int i = 0; i < INPUT_NUM; i++) {
-      learned_capacities[i] = capacities[i];
-    }
+    memcpy(&learned_capacities, &capacities, INPUT_NUM * sizeof(float));
 
     for (int i = INPUT_NUM; i < CAPACITY_LEN; i++) {
       Input input;
-      for (int ii = 0; ii < INPUT_NUM; ii++) {
-        input[ii] = capacities[i + ii - INPUT_NUM];
-      }
+      memcpy(&input, &capacities[i - INPUT_NUM], INPUT_NUM * sizeof(float));
 
       float output = run_network(&input, &network);
       learned_capacities[i] = output;
     }
 
     // graph learned capacities. (cascading)
-    for (int i = 0; i < INPUT_NUM; i++) {
-      casc_learned_capacities[i] = capacities[i];
-    }
+    memcpy(&casc_learned_capacities, &capacities, INPUT_NUM * sizeof(float));
 
     for (int i = INPUT_NUM; i < CAPACITY_LEN; i++) {
       Input input;
-      for (int ii = 0; ii < INPUT_NUM; ii++) {
-        input[ii] = casc_learned_capacities[i + ii - INPUT_NUM];
-      }
+      memcpy(&input, &casc_learned_capacities[i - INPUT_NUM], INPUT_NUM * sizeof(float));
 
       float output = run_network(&input, &network);
       casc_learned_capacities[i] = output;
